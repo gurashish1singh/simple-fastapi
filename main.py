@@ -4,10 +4,13 @@ from typing import Optional
 from enum import Enum
 
 from fastapi import FastAPI
+from fastapi import Path
 from fastapi import Query
-from pydantic import BaseModel
 from typing_extensions import Annotated
 
+from models import Image
+from models import Item
+from models import User
 
 app = FastAPI()
 
@@ -19,13 +22,6 @@ FAKE_ITEMS_DB = [
     {"item_name": "Bat"},
     {"item_name": "Ball"},
 ]
-
-
-class Item(BaseModel):
-    name: str
-    description: Optional[str] = None
-    price: float
-    tax: Optional[float] = None
 
 
 class ModelName(str, Enum):
@@ -85,18 +81,18 @@ async def get_model(model_name: ModelName) -> dict[str, str]:
 
 
 # Optional params turn into query params
-@app.get("/items/{item_id}")
-async def read_item(
-    item_id: str, q: Optional[str] = None, short: bool = False,
-) -> dict[str, str]:
-    item = {"item_id": item_id}
-    if q:
-        item.update({"q": q})
-    if not short:
-        item.update({
-            "description": "Testing bool params. This is being added by default. Send in short to suppress."
-        })
-    return item
+# @app.get("/items/{item_id}")
+# async def read_item(
+#     item_id: str, q: Optional[str] = None, short: bool = False,
+# ) -> dict[str, str]:
+#     item_dict = {"item_id": item_id}
+#     if q:
+#         item_dict.update({"q": q})
+#     if not short:
+#         item_dict.update({
+#             "description": "Testing bool params. This is being added by default. Send in short to suppress."
+#         })
+#     return item_dict
 
 
 # Reading multiple inputs
@@ -104,69 +100,94 @@ async def read_item(
 async def read_user_item(
     user_id: int, item_id: str, q: Optional[str] = None, short: bool = False
 ):
-    item = {"item_id": item_id, "owner_id": user_id}
+    item_dict = {"item_id": item_id, "owner_id": user_id}
     if q:
-        item.update({"q": q})
+        item_dict.update({"q": q})
     if not short:
-        item.update(
+        item_dict.update(
             {"description": "This is an amazing item that has a long description"}
         )
-    return item
+    return item_dict
 
 
 # Custom validation for query params
 # Old format
 # @app.get("/items/")
 # async def read_items(q: Optional[str] = Query(default=None, min_length=50)) -> dict[str, Any]:
-#     item = {
+#     item_dict = {
 #         "test": "foo",
 #         "bar": "custom validation for query params"
 #     }
 #     if q:
-#         item.update({"q": q})
-#     return item
+#         item_dict.update({"q": q})
+#     return item_dict
 
 
 # New format with Annotated
 # Annotated is new in py3.9 and can be used to pass metadata for arguments
 # @app.get("/items/")
 # async def read_items(q: Annotated[Optional[str], Query(min_length=50)] = "fixedquery") -> dict[str, Any]:
-#     item = {
+#     item_dict = {
 #         "test": "foo",
 #         "bar": "custom validation for query params"
 #     }
 #     if q:
-#         item.update({"q": q})
-#     return item
+#         item_dict.update({"q": q})
+#     return item_dict
 
 
 # Lis query params
 # @app.get("/items/")
 # async def read_items(q: Annotated[Optional[list[str]], Query()] = None) -> dict[str, Any]:
-#     item = {
+#     item_dict = {
 #         "test": "foo",
 #         "bar": "custom validation for query params"
 #     }
 #     if q:
-#         item.update({"q": q})
-#     return item
+#         item_dict.update({"q": q})
+#     return item_dict
 
 
 # Add Query metadata
-@app.get("/items/")
+# @app.get("/items/")
+# async def read_items(
+#     q: Annotated[Optional[str], Query(
+#         title="Some query title",
+#         min_length=3
+#     )] = None
+# ) -> dict[str, Any]:
+#     item_dict = {
+#         "test": "foo",
+#         "bar": "custom validation for query params"
+#     }
+#     if q:
+#         item_dict.update({"q": q})
+#     return item_dict
+
+
+# Add Path metadata and order doesn't matter when using Path
+# @app.get("/items/{item_id}")
+# async def read_items(q: str, item_id: int = Path(title="The ID of the item to get")) -> dict[str, Any]:
+#     item_dict = {"item_id": item_id}
+#     if q:
+#         item_dict.update({"q": q})
+#     return item_dict
+
+# With Annotated
+@app.get("/items/{item_id}")
 async def read_items(
-    q: Annotated[Optional[str], Query(
-        title="Some query title",
-        min_length=3
-    )] = None
+    q: str,
+    item_id: Annotated[int, Path(
+        title="The ID of the item to get",
+        ge=1,
+        ),
+    ]
 ) -> dict[str, Any]:
-    item = {
-        "test": "foo",
-        "bar": "custom validation for query params"
-    }
+    item_dict = {"item_id": item_id}
     if q:
-        item.update({"q": q})
-    return item
+        item_dict.update({"q": q})
+    return item_dict
+
 
 """
 All POST
@@ -183,16 +204,62 @@ async def create_item(item: Item) -> dict[str, Any]:
     return item_dict
 
 
+# List of bodies
+@app.post("/images/multiple/")
+async def create_multiple_images(images: list[Image]):
+    return images
+
+
+# Sending random dicts -> without pydantic model, input is still validated
+@app.post("/index-weights/")
+async def create_index_weights(weights: dict[int, float]):
+    return weights
+
+
 # Path param and request body together
 # @app.put("/items/{item_id}")
 # async def update_item(item_id: int, item: Item) -> dict[str, Any]:
 #     return {"item_id": item_id, **item.dict()}
 
 
+"""
+All PUT
+"""
+
+
 # Query, Path params, and request body together
+# @app.put("/items/{item_id}")
+# async def update_item(item_id: int, item: Item, q: Optional[str] = None) -> dict[str, Any]:
+#     item_dict = {"item_id": item_id, **item.dict()}
+#     if q:
+#         item_dict.update({"q": q})
+#     return item_dict
+
+
+# Path with optional query and body
+# @app.put("/items/{item_id}")
+# async def update_item(
+#     item_id: Annotated[int, Path(title="ID of the item to update", gt=0)],
+#     item: Optional[Item] = None,
+#     q: Optional[str] = None
+# ) -> dict[str, Any]:
+#     item_dict = {"item_id": item_id}
+#     if q:
+#         item_dict.update({"q": q})
+#     if item:
+#         item_dict.update(**item.dict())
+#     return item_dict
+
+
+# Multiple request body
 @app.put("/items/{item_id}")
-async def update_item(item_id: int, item: Item, q: Optional[str] = None) -> dict[str, Any]:
-    item_dict = {"item_id": item_id, **item.dict()}
+async def update_item(
+    item_id: Annotated[int, Path(title="ID of the item to update", gt=0)],
+    item: Item,
+    user: User,
+    q: Optional[str] = None
+) -> dict[str, Any]:
+    item_dict = {"item_id": item_id, "item": item, "user": user}
     if q:
         item_dict.update({"q": q})
     return item_dict
